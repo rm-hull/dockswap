@@ -9,59 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/filters"
-	"github.com/moby/moby/api/types/image"
-	"github.com/moby/moby/api/types/network"
-	"github.com/moby/moby/client"
-	"github.com/spf13/cobra"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/network"
+	"github.com/docker/docker/client"
 )
 
-var (
-	serviceName    string
-	projectName    string
-	imageName      string
-	waitSeconds    int
-	timeoutSeconds int
-)
-
-var rootCmd = &cobra.Command{
-	Use:   "dockswap",
-	Short: "Perform safe, health-checked rolling restarts of Docker Compose services",
-	Long: `dockwap pulls the latest image, starts a new container, waits until it passes its HEALTHCHECK, then stops the old one — ensuring zero downtime.
-
-Features:
--   Sequential rolling updates for Docker Compose services
--   Uses container healthchecks to ensure readiness
--   Works with multiple replicas
--   Pure Docker Engine API (no shell commands)`,
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := run(); err != nil {
-			log.Fatal(err)
-		}
-	},
-}
-
-func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
-		os.Exit(1)
-	}
-}
-
-func init() {
-	rootCmd.Flags().StringVarP(&serviceName, "service", "s", "", "Docker Compose service name (required)")
-	rootCmd.Flags().StringVarP(&projectName, "project", "p", "", "Docker Compose project name (required)")
-	rootCmd.Flags().StringVarP(&imageName, "image", "i", "", "Image to pull and deploy (required)")
-	rootCmd.Flags().IntVarP(&waitSeconds, "wait", "w", 5, "Seconds between health checks")
-	rootCmd.Flags().IntVarP(&timeoutSeconds, "timeout", "t", 120, "Max seconds to wait for container to be healthy")
-
-	rootCmd.MarkFlagRequired("service")
-	rootCmd.MarkFlagRequired("project")
-	rootCmd.MarkFlagRequired("image")
-}
-
-func run() error {
+func Run(serviceName, projectName, imageName string, timeoutSeconds, waitSeconds int) error {
 	ctx := context.Background()
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -144,8 +99,12 @@ func replaceContainer(ctx context.Context, cli *client.Client, old container.Sum
 
 	// Stop & remove old container
 	log.Printf("Stopping old container: %s\n", old.ID[:12])
-	cli.ContainerStop(ctx, old.ID, container.StopOptions{})
-	cli.ContainerRemove(ctx, old.ID, container.RemoveOptions{})
+	if err := cli.ContainerStop(ctx, old.ID, container.StopOptions{}); err != nil {
+		return err
+	}
+	if err := cli.ContainerRemove(ctx, old.ID, container.RemoveOptions{}); err != nil {
+		return err
+	}
 	log.Println("Old container removed.")
 	return nil
 }
