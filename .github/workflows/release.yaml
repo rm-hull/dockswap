@@ -1,0 +1,37 @@
+name: Release dockswap
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Build binaries
+        run: |
+          mkdir -p bin
+          GOOS=linux   GOARCH=amd64 go build -o bin/dockswap-linux-amd64   main.go
+          GOOS=linux   GOARCH=arm64 go build -o bin/dockswap-linux-arm64   main.go
+          GOOS=darwin  GOARCH=amd64 go build -o bin/dockswap-darwin-amd64  main.go
+          GOOS=darwin  GOARCH=arm64 go build -o bin/dockswap-darwin-arm64  main.go
+          GOOS=windows GOARCH=amd64 go build -o bin/dockswap-windows-amd64.exe main.go
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
